@@ -1,2 +1,7 @@
 */__pycache__/
 datasets/
+wlasl/*
+!wlasl/*.csv
+!wlasl/*.json
+!wlasl/*.txt
+.DS_Store
