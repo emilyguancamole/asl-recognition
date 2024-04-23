@@ -14,10 +14,12 @@ from torch.utils.data import DataLoader
 from pathlib import Path
 
 from utils import __balance_val_split, __split_of_train_sequence, __log_class_statistics
-from datasets.czech_slr_dataset import CzechSLRDataset
+from datasets.data_processing import LandmarkDataset
 from spoter.spoter_model import SPOTER
 from spoter.utils import train_epoch, evaluate
 from spoter.gaussian_noise import GaussianNoise
+
+from sklearn.utils.class_weight import compute_class_weight
 
 
 def get_default_args():
@@ -28,21 +30,21 @@ def get_default_args():
     parser.add_argument("--experiment_name", type=str, default="wlasl-100",
                         help="Name of the experiment after which the logs and plots will be named")
     parser.add_argument("--num_classes", type=int, default=100, help="Number of classes to be recognized by the model")
-    parser.add_argument("--hidden_dim", type=int, default=108,
-                        help="Hidden dimension of the underlying Transformer model")
+    parser.add_argument("--hidden_dim", type=int, default=110,
+                        help="Hidden dimension of the underlying Transformer model") ### default=108
     parser.add_argument("--seed", type=int, default=379,
                         help="Seed with which to initialize all the random components of the training")
 
     # Data
-    parser.add_argument("--training_set_path", type=str, default="WLASL_normalized_train_25fps.csv", help="Path to the training dataset CSV file")
-    parser.add_argument("--testing_set_path", type=str, default="WLASL100_test_25fps.csv", help="Path to the testing dataset CSV file")
+    parser.add_argument("--training_set_path", type=str, default="WLASL/train.csv", help="Path to the training dataset CSV file")
+    parser.add_argument("--testing_set_path", type=str, default="WLASL/test.csv", help="Path to the testing dataset CSV file")
 
     parser.add_argument("--validation_set", type=str, choices=["from-file", "split-from-train", "none"],
                         default="from-file", help="Type of validation set construction. See README for further rederence")
     parser.add_argument("--validation_set_size", type=float,
                         help="Proportion of the training set to be split as validation set, if 'validation_size' is set"
-                             " to 'split-from-train'")
-    parser.add_argument("--validation_set_path", type=str, default="WLASL_normalized_val_25fps.csv", help="Path to the validation dataset CSV file")
+                            " to 'split-from-train'")
+    parser.add_argument("--validation_set_path", type=str, default="WLASL/val.csv", help="Path to the validation dataset CSV file")
 
     # Training hyperparameters
     parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train the model for")
@@ -75,7 +77,7 @@ def get_default_args():
 
 def train(args):
 
-    # MARK: TRAINING PREPARATION AND MODULES
+    # TRAINING PREPARATION AND MODULES
 
     # Initialize all the random seeds
     random.seed(args.seed)
@@ -92,9 +94,6 @@ def train(args):
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(args.experiment_name + "_" + str(args.experimental_train_split).replace(".", "") + ".log")
-        ]
     )
 
     # Set device to CUDA only if applicable
@@ -111,27 +110,33 @@ def train(args):
     slrt_model.train(True)
     slrt_model.to(device)
 
-    # Construct the other modules
-    cel_criterion = nn.CrossEntropyLoss()
-    sgd_optimizer = optim.SGD(slrt_model.parameters(), lr=args.lr)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(sgd_optimizer, factor=args.scheduler_factor, patience=args.scheduler_patience)
-
     # Ensure that the path for checkpointing and for images both exist
     Path("out-checkpoints/" + args.experiment_name + "/").mkdir(parents=True, exist_ok=True)
     Path("out-img/").mkdir(parents=True, exist_ok=True)
 
-
-    # MARK: DATA
-
     # Training set
     transform = transforms.Compose([GaussianNoise(args.gaussian_mean, args.gaussian_std)])
-    train_set = CzechSLRDataset(args.training_set_path, transform=transform, augmentations=True)#, normalize=False)
-    print("type train_set: ", type(train_set))
+    train_set = LandmarkDataset(args.training_set_path, transform=transform, augmentations=True)
+
+    print("type train_set: ", type(train_set)) ## class LandmarkDataset
+    print("shape train_set: ", type(train_set.data)) ## list
+    print("shape train_set: ", len(train_set.data)) ## 1442
+
     train_loader = DataLoader(train_set, shuffle=True, generator=g)
 
-    # Validation set
+
+    # Compute class weights for cross entropy loss
+    class_weights = compute_class_weight(class_weight='balanced',classes=np.unique(train_set.labels),y=train_set.labels)
+    class_weights = torch.tensor(class_weights,dtype=torch.float).to(device)
+
+    # Construct the other modules
+    cel_criterion = nn.CrossEntropyLoss(weight=class_weights)
+    sgd_optimizer = optim.SGD(slrt_model.parameters(), lr=args.lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(sgd_optimizer, factor=args.scheduler_factor, patience=args.scheduler_patience)
+
+    # Validation set (do not augment, only normalize)
     if args.validation_set == "from-file":
-        val_set = CzechSLRDataset(args.validation_set_path)
+        val_set = LandmarkDataset(args.validation_set_path) 
         val_loader = DataLoader(val_set, shuffle=True, generator=g)
     elif args.validation_set == "split-from-train":
         train_set, val_set = __balance_val_split(train_set, 0.2)
@@ -139,14 +144,14 @@ def train(args):
         val_set.augmentations = False
         val_loader = DataLoader(val_set, shuffle=True, generator=g)
 
-    # Testing set
+    # Testing set (do not augment, only normalize)
     if args.testing_set_path:
-        eval_set = CzechSLRDataset(args.testing_set_path)
+        eval_set = LandmarkDataset(args.testing_set_path)
         eval_loader = DataLoader(eval_set, shuffle=True, generator=g)
-    # else:
-    #     eval_loader = None
+    else:
+        eval_loader = None
 
-    # MARK: TRAINING
+    # TRAINING
     train_acc, val_acc = 0, 0
     losses, train_accs, val_accs = [], [], []
     lr_progress = []
@@ -157,7 +162,8 @@ def train(args):
     logging.info("Starting " + args.experiment_name + "...\n\n")
 
     for epoch in range(args.epochs):
-        train_loss, _, _, train_acc = train_epoch(slrt_model, train_loader, cel_criterion, sgd_optimizer, device)
+        train_loss, _, _, train_acc = train_epoch(slrt_model, train_loader, cel_criterion, sgd_optimizer, device, scheduler=scheduler)
+
         losses.append(train_loss.item() / len(train_loader))
         train_accs.append(train_acc)
         # Validation

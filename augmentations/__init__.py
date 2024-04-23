@@ -9,9 +9,10 @@ import numpy as np
 from normalization.body_normalization import BODY_IDENTIFIERS
 from normalization.hand_normalization import HAND_IDENTIFIERS
 
-
-HAND_IDENTIFIERS = [id + "_0" for id in HAND_IDENTIFIERS] + [id + "_1" for id in HAND_IDENTIFIERS]
-ARM_IDENTIFIERS_ORDER = ["neck", "$side$Shoulder", "$side$Elbow", "$side$Wrist"]
+HAND_IDENTIFIERS = [id + "R" for id in HAND_IDENTIFIERS] + [id + "L" for id in HAND_IDENTIFIERS]
+# HAND_IDENTIFIERS = [id + "_0" for id in HAND_IDENTIFIERS] + [id + "_1" for id in HAND_IDENTIFIERS]
+# ARM_IDENTIFIERS_ORDER = ["neck", "$side$Shoulder", "$side$Elbow", "$side$Wrist"]
+ARM_IDENTIFIERS_ORDER = ["shoulder$S$", "elbow$S$", "wpose$S$"]
 
 
 def __random_pass(prob):
@@ -37,8 +38,8 @@ def __dictionary_to_numpy(landmarks_dict: dict) -> np.ndarray:
     Supplementary method converting dictionaries of body landmark data into respective NumPy arrays. The resulting array
     will match the order of the BODY_IDENTIFIERS list.
     """
-
-    output = np.empty(shape=(len(landmarks_dict["leftEar"]), len(BODY_IDENTIFIERS), 2))
+    first_ft = BODY_IDENTIFIERS[0]
+    output = np.empty(shape=(len(landmarks_dict[f'{first_ft}']), len(BODY_IDENTIFIERS), 2))
 
     for landmark_index, identifier in enumerate(BODY_IDENTIFIERS):
         output[:, landmark_index, 0] = np.array(landmarks_dict[identifier])[:, 0]
@@ -76,9 +77,9 @@ def __preprocess_row_sign(sign: dict) -> (dict, dict):
 
     if "nose_X" in sign_eval:
         body_landmarks = {identifier: [(x, y) for x, y in zip(sign_eval[identifier + "_X"], sign_eval[identifier + "_Y"])]
-                          for identifier in BODY_IDENTIFIERS}
+                        for identifier in BODY_IDENTIFIERS}
         hand_landmarks = {identifier: [(x, y) for x, y in zip(sign_eval[identifier + "_X"], sign_eval[identifier + "_Y"])]
-                          for identifier in HAND_IDENTIFIERS}
+                        for identifier in HAND_IDENTIFIERS}
 
     else:
         body_landmarks = {identifier: sign_eval[identifier] for identifier in BODY_IDENTIFIERS}
@@ -111,9 +112,9 @@ def augment_rotate(sign: dict, angle_range: tuple) -> dict:
     angle = math.radians(random.uniform(*angle_range))
 
     body_landmarks = {key: [__rotate((0.5, 0.5), frame, angle) for frame in value] for key, value in
-                      body_landmarks.items()}
+                    body_landmarks.items()}
     hand_landmarks = {key: [__rotate((0.5, 0.5), frame, angle) for frame in value] for key, value in
-                      hand_landmarks.items()}
+                    hand_landmarks.items()}
 
     return __wrap_sign_into_row(body_landmarks, hand_landmarks)
 
@@ -135,11 +136,11 @@ def augment_shear(sign: dict, type: str, squeeze_ratio: tuple) -> dict:
     :param sign: Dictionary with sequential skeletal data of the signing person
     :param type: Type of shear augmentation to perform (either 'squeeze' or 'perspective')
     :param squeeze_ratio: Tuple containing the relative range from what the proportion of the original width will be
-                          randomly chosen. These proportions will either be cut from both sides or used to construct the
-                          new projection
+                            randomly chosen. These proportions will either be cut from both sides or used to construct the
+                            new projection
 
     :return: Dictionary with augmented (by squeezing or perspective transformation) sequential skeletal data of the
-             signing person
+                signing person
     """
 
     body_landmarks, hand_landmarks = __preprocess_row_sign(sign)
@@ -201,10 +202,11 @@ def augment_arm_joint_rotate(sign: dict, probability: float, angle_range: tuple)
     body_landmarks, hand_landmarks = __preprocess_row_sign(sign)
 
     # Iterate over both directions (both hands)
-    for side in ["left", "right"]:
+    ### for side in ["left", "right"]:
+    for side in ["R", "L"]:
         # Iterate gradually over the landmarks on arm
         for landmark_index, landmark_origin in enumerate(ARM_IDENTIFIERS_ORDER):
-            landmark_origin = landmark_origin.replace("$side$", side)
+            landmark_origin = landmark_origin.replace("$S$", side)
 
             # End the process on the current hand if the landmark is not present
             if landmark_origin not in body_landmarks:
@@ -215,7 +217,7 @@ def augment_arm_joint_rotate(sign: dict, probability: float, angle_range: tuple)
                 angle = math.radians(random.uniform(*angle_range))
 
                 for to_be_rotated in ARM_IDENTIFIERS_ORDER[landmark_index + 1:]:
-                    to_be_rotated = to_be_rotated.replace("$side$", side)
+                    to_be_rotated = to_be_rotated.replace("$S$", side)
 
                     # Skip if the landmark is not present
                     if to_be_rotated not in body_landmarks:

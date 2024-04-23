@@ -1,31 +1,49 @@
-
-import logging
 import pandas as pd
 
 HAND_IDENTIFIERS = [
-    "wrist",
-    "indexTip",
-    "indexDIP",
-    "indexPIP",
-    "indexMCP",
-    "middleTip",
-    "middleDIP",
-    "middlePIP",
-    "middleMCP",
-    "ringTip",
-    "ringDIP",
-    "ringPIP",
-    "ringMCP",
-    "littleTip",
-    "littleDIP",
-    "littlePIP",
-    "littleMCP",
-    "thumbTip",
-    "thumbIP",
-    "thumbMP",
-    "thumbCMC"
+    'wrist',
+    'thumb_cmc',
+    'thumb_mcp', 
+    'thumb_ip',
+    'thumb_tip',
+    'index_mcp', 
+    'index_pip', 
+    'index_dip', 
+    'index_tip', 
+    'middle_mcp', 
+    'middle_pip',
+    'middle_dip', 
+    'middle_tip', 
+    'ring_mcp',
+    'ring_pip', 
+    'ring_dip',
+    'ring_tip', 
+    'pinky_mcp', 
+    'pinky_pip', 
+    'pinky_dip', 
+    'pinky_tip', 
+    'wrist',
+    'thumb_cmc',
+    'thumb_mcp', 
+    'thumb_ip',
+    'thumb_tip',
+    'index_mcp', 
+    'index_pip', 
+    'index_dip', 
+    'index_tip', 
+    'middle_mcp', 
+    'middle_pip',
+    'middle_dip', 
+    'middle_tip', 
+    'ring_mcp',
+    'ring_pip', 
+    'ring_dip',
+    'ring_tip', 
+    'pinky_mcp', 
+    'pinky_pip', 
+    'pinky_dip', 
+    'pinky_tip', 
 ]
-
 
 def normalize_hands_full(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -36,9 +54,7 @@ def normalize_hands_full(df: pd.DataFrame) -> pd.DataFrame:
     """
 
     empty = 0
-
-    # TODO: Fix division by zero
-    df.columns = [item.replace("_left_", "_0_").replace("_right_", "_1_") for item in list(df.columns)]
+    df.columns = [item.replace("L_", "_0_").replace("R_", "_1_") for item in list(df.columns)]
 
     normalized_df = pd.DataFrame(columns=df.columns)
 
@@ -72,9 +88,6 @@ def normalize_hands_full(df: pd.DataFrame) -> pd.DataFrame:
                 # Prevent from even starting the analysis if some necessary elements are not present
                 if not landmarks_x_values or not landmarks_y_values:
                     empty += 1
-                    # logging.warning(
-                    #     " HAND LANDMARKS: One frame could not be normalized as there is no data present. Record: " + str(index) +
-                    #     ", Frame: " + str(sequence_index))
                     continue
                 
 
@@ -100,56 +113,50 @@ def normalize_hands_full(df: pd.DataFrame) -> pd.DataFrame:
                     if row[key + "X"][sequence_index] == 0 or (ending_point[0] - starting_point[0]) == 0 or (starting_point[1] - ending_point[1]) == 0:
                         continue
 
-                    normalized_x = (row[key + "X"][sequence_index] - starting_point[0]) / (ending_point[0] -
-                                                                                           starting_point[0])
-                    normalized_y = (row[key + "Y"][sequence_index] - ending_point[1]) / (starting_point[1] -
-                                                                                         ending_point[1])
+                    normalized_x = (row[key + "X"][sequence_index] - starting_point[0]) / (ending_point[0] - starting_point[0])
+                    normalized_y = (row[key + "Y"][sequence_index] - ending_point[1]) / (starting_point[1] - ending_point[1])
 
                     row[key + "X"][sequence_index] = normalized_x
                     row[key + "Y"][sequence_index] = normalized_y
 
         normalized_df = pd.concat([normalized_df, pd.DataFrame([row])], ignore_index=True)
-
-    print(empty)
     
     return normalized_df
 
 
-def normalize_single_dict(row: dict):
+def normalize_single_dict(row: dict): 
     """
     Normalizes the skeletal data for a given sequence of frames with signer's hand pose data. The normalization follows
     the definition from our paper.
 
     :param row: Dictionary containing key-value pairs with joint identifiers and corresponding lists (sequences) of
-                that particular joints coordinates
+                that particular joints coordinates # joint: [frames,(X,Y)] shape array
     :return: Dictionary with normalized skeletal data (following the same schema as input data)
     """
 
-    hand_landmarks = {0: [], 1: []}
-
-    # Determine how many hands are present in the dataset
-    range_hand_size = 1
-    if "wrist_1" in row.keys():
-        range_hand_size = 2
+    hand_landmarks = {'R': [], 'L': []}
+    hands = ['R', 'L']
 
     # Construct the relevant identifiers
     for identifier in HAND_IDENTIFIERS:
-        for hand_index in range(range_hand_size):
-            hand_landmarks[hand_index].append(identifier + "_" + str(hand_index))
+        ### for hand_index in range(range_hand_size):
+        for hand_index in hands:
+            hand_landmarks[hand_index].append(identifier + hand_index)
 
     # Treat each hand individually
-    for hand_index in range(range_hand_size):
+    ### for hand_index in range(range_hand_size):
+    for hand_index in hands:
 
-        sequence_size = len(row["wrist_" + str(hand_index)])
+        sequence_size = len(row["wrist" + hand_index])
 
         # Treat each element of the sequence (analyzed frame) individually
         for sequence_index in range(sequence_size):
 
             # Retrieve all of the X and Y values of the current frame
             landmarks_x_values = [row[key][sequence_index][0] for key in hand_landmarks[hand_index] if
-                                  row[key][sequence_index][0] != 0]
+                                row[key][sequence_index][0] != 0]
             landmarks_y_values = [row[key][sequence_index][1] for key in hand_landmarks[hand_index] if
-                                  row[key][sequence_index][1] != 0]
+                                row[key][sequence_index][1] != 0]
 
             # Prevent from even starting the analysis if some necessary elements are not present
             if not landmarks_x_values or not landmarks_y_values:
@@ -171,17 +178,15 @@ def normalize_single_dict(row: dict):
 
             # Normalize individual landmarks and save the results
             for identifier in HAND_IDENTIFIERS:
-                key = identifier + "_" + str(hand_index)
+                key = identifier + hand_index
 
                 # Prevent from trying to normalize incorrectly captured points
                 if row[key][sequence_index][0] == 0 or (ending_point[0] - starting_point[0]) == 0 or (
                         starting_point[1] - ending_point[1]) == 0:
                     continue
 
-                normalized_x = (row[key][sequence_index][0] - starting_point[0]) / (ending_point[0] -
-                                                                                       starting_point[0])
-                normalized_y = (row[key][sequence_index][1] - starting_point[1]) / (ending_point[1] -
-                                                                                     starting_point[1])
+                normalized_x = (row[key][sequence_index][0] - starting_point[0]) / (ending_point[0] - starting_point[0])
+                normalized_y = (row[key][sequence_index][1] - starting_point[1]) / (ending_point[1] - starting_point[1])
 
                 row[key][sequence_index] = list(row[key][sequence_index])
 

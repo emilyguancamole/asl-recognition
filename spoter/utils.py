@@ -1,4 +1,3 @@
-
 import logging
 import torch
 import numpy as np
@@ -10,13 +9,20 @@ def train_epoch(model, dataloader, criterion, optimizer, device, scheduler=None)
     running_loss = 0.0
 
     for i, data in enumerate(dataloader):
-        inputs, labels = data
+
+        # data: list of shape (2,)
+        # inputs: tensor of shape (1, frames, landmarks, 2)
+        # labels: tensor of shape (1, 1), i.e. [[label]]
+        inputs, labels = data 
+
         # convert inputs to float32
-        # inputs = inputs.astype(np.float32)
-        inputs = inputs.squeeze(0).to(device)
+        inputs = inputs.float()
+        inputs = inputs.squeeze(0).to(device) # (frames, landmarks, 2)
         labels = labels.to(device, dtype=torch.long)
 
         optimizer.zero_grad()
+
+        # outputs: tensor of shape (1, 1, 100)
         outputs = model(inputs).expand(1, -1, -1)
 
         loss = criterion(outputs[0], labels[0])
@@ -43,6 +49,7 @@ def evaluate(model, dataloader, device, print_stats=False):
 
     for i, data in enumerate(dataloader):
         inputs, labels = data
+        inputs = inputs.float()
         inputs = inputs.squeeze(0).to(device)
         labels = labels.to(device, dtype=torch.long)
 
@@ -72,6 +79,7 @@ def evaluate_top_k(model, dataloader, device, k=5):
 
     for i, data in enumerate(dataloader):
         inputs, labels = data
+        inputs = inputs.float()
         inputs = inputs.squeeze(0).to(device)
         labels = labels.to(device, dtype=torch.long)
 

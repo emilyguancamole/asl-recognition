@@ -1,4 +1,3 @@
-
 import logging
 import pandas as pd
 
@@ -17,7 +16,6 @@ BODY_IDENTIFIERS = [
     "leftWrist"
 ]
 
-
 def normalize_body_full(df: pd.DataFrame) -> (pd.DataFrame, list):
     """
     Normalizes the body position data using the Bohacek-normalization algorithm.
@@ -25,8 +23,6 @@ def normalize_body_full(df: pd.DataFrame) -> (pd.DataFrame, list):
     :param df: pd.DataFrame to be normalized
     :return: pd.DataFrame with normalized values for body pose
     """
-
-    # TODO: Fix division by zero
 
     normalized_df = pd.DataFrame(columns=df.columns)
     invalid_row_indexes = []
@@ -40,7 +36,9 @@ def normalize_body_full(df: pd.DataFrame) -> (pd.DataFrame, list):
     # Iterate over all of the records in the dataset
     for index, row in df.iterrows():
 
-        sequence_size = len(row["leftEar_Y"])
+        ### CHANGE ###
+        # sequence_size = len(row["leftEar_Y"])
+        sequence_size = len(row["mouthL_Y"])
         valid_sequence = True
         original_row = row
 
@@ -50,6 +48,7 @@ def normalize_body_full(df: pd.DataFrame) -> (pd.DataFrame, list):
         for sequence_index in range(sequence_size):
 
             # Prevent from even starting the analysis if some necessary elements are not present
+            ### CHANGE ###
             if (row["leftShoulder_X"][sequence_index] == 0 or row["rightShoulder_X"][sequence_index] == 0) and (row["neck_X"][sequence_index] == 0 or row["nose_X"][sequence_index] == 0):
                 if not last_starting_point:
                     valid_sequence = False
@@ -102,10 +101,8 @@ def normalize_body_full(df: pd.DataFrame) -> (pd.DataFrame, list):
                 if row[key + "X"][sequence_index] == 0:
                     continue
 
-                normalized_x = (row[key + "X"][sequence_index] - starting_point[0]) / (ending_point[0] -
-                                                                                       starting_point[0])
-                normalized_y = (row[key + "Y"][sequence_index] - ending_point[1]) / (starting_point[1] -
-                                                                                       ending_point[1])
+                normalized_x = (row[key + "X"][sequence_index] - starting_point[0]) / (ending_point[0] - starting_point[0])
+                normalized_y = (row[key + "Y"][sequence_index] - ending_point[1]) / (starting_point[1] - ending_point[1])
 
                 row[key + "X"][sequence_index] = normalized_x
                 row[key + "Y"][sequence_index] = normalized_y
@@ -135,7 +132,8 @@ def normalize_single_dict(row: dict):
     :return: Dictionary with normalized skeletal data (following the same schema as input data)
     """
 
-    sequence_size = len(row["leftEar"])
+    ### CHANGE from leftEar ###
+    sequence_size = len(row["eye_innerL"])
     valid_sequence = True
     original_row = row
 
@@ -145,45 +143,46 @@ def normalize_single_dict(row: dict):
     for sequence_index in range(sequence_size):
 
         # Prevent from even starting the analysis if some necessary elements are not present
-        if (row["leftShoulder"][sequence_index][0] == 0 or row["rightShoulder"][sequence_index][0] == 0) and (
-                row["neck"][sequence_index][0] == 0 or row["nose"][sequence_index][0] == 0):
-            if not last_starting_point:
+        ### CHANGE from  ####
+        ##if (row["leftShoulder"][sequence_index][0] == 0 or row["rightShoulder"][sequence_index][0] == 0) and (
+                ##row["neck"][sequence_index][0] == 0 or row["nose"][sequence_index][0] == 0):
+        
+
+        head_metric = None
+        
+        if (row['shoulderL'][sequence_index][0] != 0 and row['shoulderR'][sequence_index][0] != 0):
+            left_shoulder = (row['shoulderL'][sequence_index][0], row['shoulderL'][sequence_index][1])
+            right_shoulder = (row['shoulderR'][sequence_index][0], row['shoulderR'][sequence_index][1])
+            shoulder_distance = ((((left_shoulder[0] - right_shoulder[0]) ** 2) + (
+                    (left_shoulder[1] - right_shoulder[1]) ** 2)) ** 0.5)
+            head_metric = shoulder_distance
+        
+        elif (row['eye_innerL'][sequence_index][0] != 0 and row['eye_outerL'][sequence_index][0] != 0):
+            left_eye_outer_x = row['eye_outerL'][sequence_index][0]
+            left_eye_inner_x = row['eye_innerL'][sequence_index][0]
+            eye_distance = left_eye_outer_x - left_eye_inner_x
+            head_metric = eye_distance * 5
+
+        elif (row['eye_innerR'][sequence_index][0] != 0 and row['eye_outerR'][sequence_index][0] != 0):
+            right_eye_outer_x = row['eye_outerR'][sequence_index][0]
+            right_eye_inner_x = row['eye_innerR'][sequence_index][0]
+            eye_distance = right_eye_outer_x - right_eye_inner_x
+            head_metric = eye_distance * 5
+        
+        else: 
+            if last_starting_point is None:
                 valid_sequence = False
                 continue
 
             else:
                 starting_point, ending_point = last_starting_point, last_ending_point
+                
 
-        else:
-
-            # NOTE:
-            #
-            # While in the paper, it is written that the head metric is calculated by halving the shoulder distance,
-            # this is meant for the distance between the very ends of one's shoulder, as literature studying body
-            # metrics and ratios generally states. The Vision Pose Estimation API, however, seems to be predicting
-            # rather the center of one's shoulder. Based on our experiments and manual reviews of the data, employing
-            # this as just the plain shoulder distance seems to be more corresponding to the desired metric.
-            #
-            # Please, review this if using other third-party pose estimation libraries.
-
-            if row["leftShoulder"][sequence_index][0] != 0 and row["rightShoulder"][sequence_index][0] != 0:
-                left_shoulder = (row["leftShoulder"][sequence_index][0], row["leftShoulder"][sequence_index][1])
-                right_shoulder = (row["rightShoulder"][sequence_index][0], row["rightShoulder"][sequence_index][1])
-                shoulder_distance = ((((left_shoulder[0] - right_shoulder[0]) ** 2) + (
-                        (left_shoulder[1] - right_shoulder[1]) ** 2)) ** 0.5)
-                head_metric = shoulder_distance
-            else:
-                neck = (row["neck"][sequence_index][0], row["neck"][sequence_index][1])
-                nose = (row["nose"][sequence_index][0], row["nose"][sequence_index][1])
-                neck_nose_distance = ((((neck[0] - nose[0]) ** 2) + ((neck[1] - nose[1]) ** 2)) ** 0.5)
-                head_metric = neck_nose_distance
-
-            # Set the starting and ending point of the normalization bounding box
-            # starting_point = [row["neck"][sequence_index][0] - 3 * head_metric,
-            #                  row["leftEye"][sequence_index][1] + (head_metric / 2)]
-            starting_point = [row["neck"][sequence_index][0] - 3 * head_metric,
-                              row["leftEye"][sequence_index][1] + head_metric]
-            ending_point = [row["neck"][sequence_index][0] + 3 * head_metric, starting_point[1] - 6 * head_metric]
+        if head_metric is not None:
+            
+            starting_point = [row["nose"][sequence_index][0] - 3 * head_metric,
+                            row["eye_outerL"][sequence_index][1] - head_metric]
+            ending_point = [row["nose"][sequence_index][0] + 3 * head_metric, starting_point[1] - 6 * head_metric]
 
             last_starting_point, last_ending_point = starting_point, ending_point
 
@@ -202,7 +201,7 @@ def normalize_single_dict(row: dict):
                 continue
 
             if (ending_point[0] - starting_point[0]) == 0 or (starting_point[1] - ending_point[1]) == 0:
-                logging.info("Problematic normalization")
+                # logging.info("Problematic normalization")
                 valid_sequence = False
                 break
 
@@ -213,6 +212,37 @@ def normalize_single_dict(row: dict):
 
             row[key][sequence_index][0] = normalized_x
             row[key][sequence_index][1] = normalized_y
+
+            # NOTE:
+            #
+            # While in the paper, it is written that the head metric is calculated by halving the shoulder distance,
+            # this is meant for the distance between the very ends of one's shoulder, as literature studying body
+            # metrics and ratios generally states. The Vision Pose Estimation API, however, seems to be predicting
+            # rather the center of one's shoulder. Based on our experiments and manual reviews of the data, employing
+            # this as just the plain shoulder distance seems to be more corresponding to the desired metric.
+            #
+            # Please, review this if using other third-party pose estimation libraries.
+
+            # if row['shoulderL'][sequence_index][0] != 0 and row['shoulderR'][sequence_index][0] != 0:
+            #     left_shoulder = (row['shoulderL'][sequence_index][0], row['shoulderL'][sequence_index][1])
+            #     right_shoulder = (row['shoulderR'][sequence_index][0], row['shoulderR'][sequence_index][1])
+            #     shoulder_distance = ((((left_shoulder[0] - right_shoulder[0]) ** 2) + (
+            #             (left_shoulder[1] - right_shoulder[1]) ** 2)) ** 0.5)
+            #     head_metric = shoulder_distance
+            # else:
+            #     neck = (row["neck"][sequence_index][0], row["neck"][sequence_index][1])
+            #     nose = (row["nose"][sequence_index][0], row["nose"][sequence_index][1])
+            #     neck_nose_distance = ((((neck[0] - nose[0]) ** 2) + ((neck[1] - nose[1]) ** 2)) ** 0.5)
+            #     head_metric = neck_nose_distance
+
+            # Set the starting and ending point of the normalization bounding box
+            # starting_point = [row["neck"][sequence_index][0] - 3 * head_metric,
+            #                  row["leftEye"][sequence_index][1] + (head_metric / 2)]
+
+            ### CHANGE from neck to nose, leftEye to eye_outerL ###
+            ### CHANGE from head
+        
+    
 
     if valid_sequence:
         return row
