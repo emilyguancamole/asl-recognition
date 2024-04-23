@@ -1,7 +1,13 @@
-*/__pycache__/
-datasets/
+__pycache__/
+*/__pycache__/*
+*/__pycache__/*.pyc
 wlasl/*
-!wlasl/*.csv
 !wlasl/*.json
 !wlasl/*.txt
 .DS_Store
+*.png
+*.jpg
+out-checkpoints/
+out-img/
+*.csv
+*.log
