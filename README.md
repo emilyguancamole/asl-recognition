@@ -1,6 +1,7 @@
 # asl-recognition
 
-Code modified from 
+Transformer model is based on the SPOTER Model by Bohacek and Hruz (2022), with original code found in the repository: https://github.com/matyasbohacek/spoter/tree/main.
+```
 @InProceedings{Bohacek_2022_WACV,
     author    = {Boh\'a\v{c}ek, Maty\'a\v{s} and Hr\'uz, Marek},
     title     = {Sign Pose-Based Transformer for Word-Level Sign Language Recognition},
@@ -9,4 +10,4 @@ Code modified from
     year      = {2022},
     pages     = {182-191}
 }
-Repo: https://github.com/matyasbohacek/spoter/tree/main
+```
